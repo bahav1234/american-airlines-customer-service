@@ -344,11 +344,21 @@ void CalculateIndicators()
    // HalfTrend
    CalculateHalfTrend();
 
-   // Ichimoku Cloud (conversion/base only)
-   double highest5 = iHigh(_Symbol, PERIOD_CURRENT, iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, IC_ConversionPeriods, 0));
-   double lowest5  = iLow(_Symbol,  PERIOD_CURRENT, iLowest (_Symbol, PERIOD_CURRENT, MODE_LOW,  IC_ConversionPeriods, 0));
-   double highest24 = iHigh(_Symbol, PERIOD_CURRENT, iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, IC_BasePeriods, 0));
-   double lowest24  = iLow(_Symbol,  PERIOD_CURRENT, iLowest (_Symbol, PERIOD_CURRENT, MODE_LOW,  IC_BasePeriods, 0));
+   // Ichimoku Cloud (conversion/base only) - replace iHighest/iLowest with loops
+   double highest5 = -DBL_MAX;
+   double lowest5  =  DBL_MAX;
+   for (int i=0; i<IC_ConversionPeriods; ++i)
+   {
+      highest5 = MathMax(highest5, iHigh(_Symbol, PERIOD_CURRENT, i));
+      lowest5  = MathMin(lowest5,  iLow (_Symbol, PERIOD_CURRENT, i));
+   }
+   double highest24 = -DBL_MAX;
+   double lowest24  =  DBL_MAX;
+   for (int i=0; i<IC_BasePeriods; ++i)
+   {
+      highest24 = MathMax(highest24, iHigh(_Symbol, PERIOD_CURRENT, i));
+      lowest24  = MathMin(lowest24,  iLow (_Symbol, PERIOD_CURRENT, i));
+   }
 
    IC_ConversionLine = (highest5 + lowest5) / 2.0;
    IC_BaseLine = (highest24 + lowest24) / 2.0;
@@ -657,12 +667,11 @@ void CloseOrders(ENUM_ORDER_TYPE type)
       if ((int)magic != MagicNumber) continue;
 
       ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-      ulong ticket = (ulong)PositionGetInteger(POSITION_TICKET);
 
       if ((type == ORDER_TYPE_BUY && ptype == POSITION_TYPE_BUY) ||
           (type == ORDER_TYPE_SELL && ptype == POSITION_TYPE_SELL))
       {
-         trade.PositionClose(ticket);
+         trade.PositionClose(_Symbol);
       }
    }
 }
@@ -692,9 +701,9 @@ void ExecuteOrder(ENUM_ORDER_TYPE orderType)
 
    bool ok = false;
    if (orderType == ORDER_TYPE_BUY)
-      ok = trade.Buy(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
+      ok = trade.Buy(LotSize, _Symbol, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
    else if (orderType == ORDER_TYPE_SELL)
-      ok = trade.Sell(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
+      ok = trade.Sell(LotSize, _Symbol, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
 
    if(!ok)
    {
