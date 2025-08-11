@@ -493,8 +493,7 @@ void CalculateHalfTrend()
    // ATR for HalfTrend
    double atr_100 = GetATR(100, 0);
    double HT_Atr2 = atr_100 / 2.0;
-   double HT_Dev = HT_ChannelDeviation * HT_Atr2;
-   (void)HT_Dev; // currently unused in simplified logic
+   double HT_Dev = HT_ChannelDeviation * HT_Atr2; // reserved for future use
 
    // Find highest and lowest bars in the last HT_Amplitude bars
    int highestbars = 0, lowestbars = 0;
@@ -690,13 +689,12 @@ void ExecuteOrder(ENUM_ORDER_TYPE orderType)
    // Prefer CTrade for execution under MT5
    trade.SetExpertMagicNumber(MagicNumber);
    trade.SetDeviationInPoints(10);
-   trade.SetComments("Akshay EA");
 
    bool ok = false;
    if (orderType == ORDER_TYPE_BUY)
-      ok = trade.Buy(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0));
+      ok = trade.Buy(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
    else if (orderType == ORDER_TYPE_SELL)
-      ok = trade.Sell(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0));
+      ok = trade.Sell(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0), "Akshay EA");
 
    if(!ok)
    {
