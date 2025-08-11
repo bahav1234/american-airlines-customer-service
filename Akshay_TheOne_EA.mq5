@@ -15,13 +15,12 @@
 //| Input Parameters                                                 |
 //+------------------------------------------------------------------+
 
-// Supertrend Parameters
-input int    ST_AtrPeriod = 10;                     // ATR Length
-input double ST_Factor = 3.0;                       // Factor
+// ATR Parameters (replacing Supertrend)
+input int    ATR_Period = 14;                       // ATR Length
 
-// HalfTrend Parameters
-input int    HT_Amplitude = 2;                      // Amplitude
-input int    HT_ChannelDeviation = 2;               // Channel Deviation
+// Bollinger Bands Parameters (replacing HalfTrend)
+input int    BB_Period = 20;                        // Bollinger Bands Period
+input double BB_Deviation = 2.0;                    // Bollinger Bands Deviation
 
 // Ichimoku Cloud Parameters
 input int    IC_ConversionPeriods = 5;              // Conversion Periods
@@ -42,16 +41,15 @@ input int    length1_UO = 7;                        // Ultimate Osc - Fast Lengt
 input int    length2_UO = 14;                       // Ultimate Osc - Middle Length
 input int    length3_UO = 28;                       // Ultimate Osc - Slow Length
 
-// SMI Ergodic Oscillator Parameters
-input int    longlen_SMIO = 20;                     // SMI Ergodic Osc - Long Length
-input int    shortlen_SMIO = 5;                     // SMI Ergodic Osc - Short Length
-input int    siglen_SMIO = 5;                       // SMI Ergodic Osc - Signal Line Length
+// RSI Parameters (replacing SMI Ergodic Oscillator)
+input int    RSI_Period = 14;                       // RSI Period
 
-// Chande Momentum Oscillator Parameters
-input int    length_ChandeMO = 9;                   // Chande Momentum Osc - ChandeMO Length
+// Stochastic Parameters (replacing Chande Momentum Oscillator)
+input int    Stoch_K_Period = 5;                    // Stochastic %K Period
+input int    Stoch_D_Period = 3;                    // Stochastic %D Period
 
-// Detrended Price Oscillator Parameters
-input int    period_DPO = 21;                       // Detrended Price Osc Length
+// Williams %R Parameters (replacing Detrended Price Oscillator)
+input int    WilliamsR_Period = 14;                 // Williams %R Period
 
 // Money Flow Index Parameters
 input int    length_MFI = 14;                       // Money Flow Index Length
@@ -65,19 +63,21 @@ input int    MagicNumber = 12345;                   // Magic Number for trades
 //+------------------------------------------------------------------+
 //| Global Variables                                                 |
 //+------------------------------------------------------------------+
-int handle_supertrend;
-int handle_half_trend;
+int handle_atr;
+int handle_bollinger;
 int handle_ichimoku;
 int handle_ppo;
 int handle_chaikin;
 int handle_ultimate;
-int handle_smi;
-int handle_chande;
-int handle_dpo;
+int handle_rsi;
+int handle_stochastic;
+int handle_williamsr;
 int handle_mfi;
 
-double supertrend_buffer[];
-double half_trend_buffer[];
+double atr_buffer[];
+double bb_upper_buffer[];
+double bb_lower_buffer[];
+double bb_middle_buffer[];
 double ichimoku_tenkan[];
 double ichimoku_kijun[];
 double ichimoku_senkou_a[];
@@ -85,9 +85,10 @@ double ichimoku_senkou_b[];
 double ppo_buffer[];
 double chaikin_buffer[];
 double ultimate_buffer[];
-double smi_buffer[];
-double chande_buffer[];
-double dpo_buffer[];
+double rsi_buffer[];
+double stoch_k_buffer[];
+double stoch_d_buffer[];
+double williamsr_buffer[];
 double mfi_buffer[];
 
 //+------------------------------------------------------------------+
@@ -96,31 +97,33 @@ double mfi_buffer[];
 int OnInit()
 {
    // Initialize indicator handles
-   handle_supertrend = iCustom(_Symbol, PERIOD_CURRENT, "Supertrend", ST_AtrPeriod, ST_Factor);
-   handle_half_trend = iCustom(_Symbol, PERIOD_CURRENT, "HalfTrend", HT_Amplitude, HT_ChannelDeviation);
+   handle_atr = iATR(_Symbol, PERIOD_CURRENT, ATR_Period);
+   handle_bollinger = iBands(_Symbol, PERIOD_CURRENT, BB_Period, 0, BB_Deviation, PRICE_CLOSE);
    handle_ichimoku = iIchimoku(_Symbol, PERIOD_CURRENT, IC_ConversionPeriods, IC_BasePeriods, IC_LaggingSpan2Periods, IC_Displacement);
    handle_ppo = iPPO(_Symbol, PERIOD_CURRENT, shortlen_PPO, longlen_PPO, PRICE_CLOSE);
    handle_chaikin = iChaikin(_Symbol, PERIOD_CURRENT, short_Chaikin_Osc, long_Chaikin_Osc);
    handle_ultimate = iUltimate(_Symbol, PERIOD_CURRENT, length1_UO, length2_UO, length3_UO);
-   handle_smi = iCustom(_Symbol, PERIOD_CURRENT, "SMI Ergodic Oscillator", longlen_SMIO, shortlen_SMIO, siglen_SMIO);
-   handle_chande = iCustom(_Symbol, PERIOD_CURRENT, "Chande Momentum Oscillator", length_ChandeMO);
-   handle_dpo = iCustom(_Symbol, PERIOD_CURRENT, "Detrended Price Oscillator", period_DPO);
+   handle_rsi = iRSI(_Symbol, PERIOD_CURRENT, RSI_Period, PRICE_CLOSE);
+   handle_stochastic = iStochastic(_Symbol, PERIOD_CURRENT, Stoch_K_Period, 3, 3, MODE_SMA, STO_LOWHIGH);
+   handle_williamsr = iWPR(_Symbol, PERIOD_CURRENT, WilliamsR_Period);
    handle_mfi = iMFI(_Symbol, PERIOD_CURRENT, length_MFI);
    
    // Check if handles are valid
-   if(handle_supertrend == INVALID_HANDLE || handle_half_trend == INVALID_HANDLE || 
+   if(handle_atr == INVALID_HANDLE || handle_bollinger == INVALID_HANDLE || 
       handle_ichimoku == INVALID_HANDLE || handle_ppo == INVALID_HANDLE ||
       handle_chaikin == INVALID_HANDLE || handle_ultimate == INVALID_HANDLE ||
-      handle_smi == INVALID_HANDLE || handle_chande == INVALID_HANDLE ||
-      handle_dpo == INVALID_HANDLE || handle_mfi == INVALID_HANDLE)
+      handle_rsi == INVALID_HANDLE || handle_stochastic == INVALID_HANDLE ||
+      handle_williamsr == INVALID_HANDLE || handle_mfi == INVALID_HANDLE)
    {
       Print("Error creating indicator handles");
       return(INIT_FAILED);
    }
    
    // Set arrays as series
-   ArraySetAsSeries(supertrend_buffer, true);
-   ArraySetAsSeries(half_trend_buffer, true);
+   ArraySetAsSeries(atr_buffer, true);
+   ArraySetAsSeries(bb_upper_buffer, true);
+   ArraySetAsSeries(bb_lower_buffer, true);
+   ArraySetAsSeries(bb_middle_buffer, true);
    ArraySetAsSeries(ichimoku_tenkan, true);
    ArraySetAsSeries(ichimoku_kijun, true);
    ArraySetAsSeries(ichimoku_senkou_a, true);
@@ -128,9 +131,10 @@ int OnInit()
    ArraySetAsSeries(ppo_buffer, true);
    ArraySetAsSeries(chaikin_buffer, true);
    ArraySetAsSeries(ultimate_buffer, true);
-   ArraySetAsSeries(smi_buffer, true);
-   ArraySetAsSeries(chande_buffer, true);
-   ArraySetAsSeries(dpo_buffer, true);
+   ArraySetAsSeries(rsi_buffer, true);
+   ArraySetAsSeries(stoch_k_buffer, true);
+   ArraySetAsSeries(stoch_d_buffer, true);
+   ArraySetAsSeries(williamsr_buffer, true);
    ArraySetAsSeries(mfi_buffer, true);
    
    Print("Expert Advisor initialized successfully");
@@ -143,15 +147,15 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Release indicator handles
-   if(handle_supertrend != INVALID_HANDLE) IndicatorRelease(handle_supertrend);
-   if(handle_half_trend != INVALID_HANDLE) IndicatorRelease(handle_half_trend);
+   if(handle_atr != INVALID_HANDLE) IndicatorRelease(handle_atr);
+   if(handle_bollinger != INVALID_HANDLE) IndicatorRelease(handle_bollinger);
    if(handle_ichimoku != INVALID_HANDLE) IndicatorRelease(handle_ichimoku);
    if(handle_ppo != INVALID_HANDLE) IndicatorRelease(handle_ppo);
    if(handle_chaikin != INVALID_HANDLE) IndicatorRelease(handle_chaikin);
    if(handle_ultimate != INVALID_HANDLE) IndicatorRelease(handle_ultimate);
-   if(handle_smi != INVALID_HANDLE) IndicatorRelease(handle_smi);
-   if(handle_chande != INVALID_HANDLE) IndicatorRelease(handle_chande);
-   if(handle_dpo != INVALID_HANDLE) IndicatorRelease(handle_dpo);
+   if(handle_rsi != INVALID_HANDLE) IndicatorRelease(handle_rsi);
+   if(handle_stochastic != INVALID_HANDLE) IndicatorRelease(handle_stochastic);
+   if(handle_williamsr != INVALID_HANDLE) IndicatorRelease(handle_williamsr);
    if(handle_mfi != INVALID_HANDLE) IndicatorRelease(handle_mfi);
    
    Print("Expert Advisor deinitialized");
@@ -175,12 +179,14 @@ void OnTick()
 //+------------------------------------------------------------------+
 bool UpdateIndicators()
 {
-   // Copy Supertrend data
-   if(CopyBuffer(handle_supertrend, 0, 0, 3, supertrend_buffer) < 3)
+   // Copy ATR data
+   if(CopyBuffer(handle_atr, 0, 0, 3, atr_buffer) < 3)
       return false;
    
-   // Copy HalfTrend data
-   if(CopyBuffer(handle_half_trend, 0, 0, 3, half_trend_buffer) < 3)
+   // Copy Bollinger Bands data
+   if(CopyBuffer(handle_bollinger, 0, 0, 3, bb_middle_buffer) < 3 ||
+      CopyBuffer(handle_bollinger, 1, 0, 3, bb_upper_buffer) < 3 ||
+      CopyBuffer(handle_bollinger, 2, 0, 3, bb_lower_buffer) < 3)
       return false;
    
    // Copy Ichimoku data
@@ -202,16 +208,17 @@ bool UpdateIndicators()
    if(CopyBuffer(handle_ultimate, 0, 0, 3, ultimate_buffer) < 3)
       return false;
    
-   // Copy SMI data
-   if(CopyBuffer(handle_smi, 0, 0, 3, smi_buffer) < 3)
+   // Copy RSI data
+   if(CopyBuffer(handle_rsi, 0, 0, 3, rsi_buffer) < 3)
       return false;
    
-   // Copy Chande data
-   if(CopyBuffer(handle_chande, 0, 0, 3, chande_buffer) < 3)
+   // Copy Stochastic data
+   if(CopyBuffer(handle_stochastic, 0, 0, 3, stoch_k_buffer) < 3 ||
+      CopyBuffer(handle_stochastic, 1, 0, 3, stoch_d_buffer) < 3)
       return false;
    
-   // Copy DPO data
-   if(CopyBuffer(handle_dpo, 0, 0, 3, dpo_buffer) < 3)
+   // Copy Williams %R data
+   if(CopyBuffer(handle_williamsr, 0, 0, 3, williamsr_buffer) < 3)
       return false;
    
    // Copy MFI data
