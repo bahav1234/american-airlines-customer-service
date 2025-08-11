@@ -244,16 +244,18 @@ void CheckForSignals()
    bool buy_signal = false;
    bool sell_signal = false;
    
-   // Example signal logic using Supertrend and Ichimoku
-   if(supertrend_buffer[0] < current_price && // Price above Supertrend
+   // Example signal logic using ATR, Bollinger Bands, Ichimoku and RSI
+   if(current_price > bb_upper_buffer[0] && // Price above upper Bollinger Band
       ichimoku_tenkan[0] > ichimoku_kijun[0] && // Tenkan above Kijun
+      rsi_buffer[0] < 70 && // RSI not overbought
       mfi_buffer[0] < 80) // MFI not overbought
    {
       buy_signal = true;
    }
    
-   if(supertrend_buffer[0] > current_price && // Price below Supertrend
+   if(current_price < bb_lower_buffer[0] && // Price below lower Bollinger Band
       ichimoku_tenkan[0] < ichimoku_kijun[0] && // Tenkan below Kijun
+      rsi_buffer[0] > 30 && // RSI not oversold
       mfi_buffer[0] > 20) // MFI not oversold
    {
       sell_signal = true;
