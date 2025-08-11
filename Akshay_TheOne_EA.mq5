@@ -658,11 +658,12 @@ void CloseOrders(ENUM_ORDER_TYPE type)
       if ((int)magic != MagicNumber) continue;
 
       ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      ulong ticket = (ulong)PositionGetInteger(POSITION_TICKET);
 
       if ((type == ORDER_TYPE_BUY && ptype == POSITION_TYPE_BUY) ||
           (type == ORDER_TYPE_SELL && ptype == POSITION_TYPE_SELL))
       {
-         trade.PositionClose(_Symbol);
+         trade.PositionClose(ticket);
       }
    }
 }
@@ -686,26 +687,18 @@ void ExecuteOrder(ENUM_ORDER_TYPE orderType)
       tp = (orderType == ORDER_TYPE_BUY ? price + TakeProfit * _Point : price - TakeProfit * _Point);
    }
 
-   MqlTradeRequest request;
-   MqlTradeResult result;
+   // Prefer CTrade for execution under MT5
+   trade.SetExpertMagicNumber(MagicNumber);
+   trade.SetDeviationInPoints(10);
+   trade.SetComments("Akshay EA");
 
-   ZeroMemory(request);
-   ZeroMemory(result);
+   bool ok = false;
+   if (orderType == ORDER_TYPE_BUY)
+      ok = trade.Buy(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0));
+   else if (orderType == ORDER_TYPE_SELL)
+      ok = trade.Sell(LotSize, NULL, 0.0, (sl>0?sl:0.0), (tp>0?tp:0.0));
 
-   request.action = TRADE_ACTION_DEAL;
-   request.symbol = _Symbol;
-   request.volume = LotSize;
-   request.type = orderType;
-   request.price = NormalizeDouble(price, _Digits);
-   request.sl = (sl > 0.0 ? NormalizeDouble(sl, _Digits) : 0.0);
-   request.tp = (tp > 0.0 ? NormalizeDouble(tp, _Digits) : 0.0);
-   request.deviation = 10;
-   request.magic = MagicNumber;
-   request.comment = "Akshay EA";
-   request.type_time = ORDER_TIME_GTC;
-   request.type_filling = ORDER_FILLING_IOC;
-
-   if(!OrderSend(request, result))
+   if(!ok)
    {
       Print("OrderSend failed: ", GetLastError());
    }
