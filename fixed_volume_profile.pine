@@ -1,0 +1,192 @@
+//@version=5
+indicator("Bookmap-Style Volume Profile", "Volume Profile Extreme Zones", overlay = true, max_labels_count = 500)
+
+// Input parameters
+int lookbackPeriod = input.int(200, "Lookback Period", minval=50, maxval=1000)
+float volumeThreshold = input.float(2.0, "Volume Threshold (Std Dev)", minval=1.0, maxval=5.0, step=0.1)
+bool showBuyZones = input.bool(true, "Show Buyer Zones")
+bool showSellZones = input.bool(true, "Show Seller Zones")
+color buyerColor = input.color(color.rgb(0, 150, 0), "Buyer Zone Color")
+color sellerColor = input.color(color.rgb(150, 0, 0), "Seller Zone Color")
+int zoneOpacity = input.int(70, "Zone Opacity %", minval=10, maxval=90)
+
+// Calculate price levels for volume profile
+float rangeHigh = ta.highest(high, lookbackPeriod)
+float rangeLow = ta.lowest(low, lookbackPeriod)
+float priceRange = rangeHigh - rangeLow
+int numLevels = 50 // Reduced for better performance
+
+// Initialize arrays for volume at price levels
+var float[] volumeBuy = array.new<float>(numLevels, 0.0)
+var float[] volumeSell = array.new<float>(numLevels, 0.0)
+var float[] priceLevels = array.new<float>(numLevels, 0.0)
+
+// Calculate price levels
+for i = 0 to numLevels - 1
+    float priceLevel = rangeLow + (priceRange * i) / (numLevels - 1)
+    array.set(priceLevels, i, priceLevel)
+
+// Reset arrays on new session
+var int lastBarTime = 0
+if timeframe.change("D")
+    volumeBuy := array.new<float>(numLevels, 0.0)
+    volumeSell := array.new<float>(numLevels, 0.0)
+    lastBarTime := time
+
+// Accumulate volume at price levels
+if barstate.isconfirmed
+    currentVolume = volume
+    currentHigh = high
+    currentLow = low
+    currentClose = close
+    currentOpen = open
+    
+    // Determine if bar is predominantly buying or selling pressure
+    isBuyPressure = currentClose > currentOpen
+    
+    // Find which price levels this bar covers
+    for i = 0 to numLevels - 1
+        levelPrice = array.get(priceLevels, i)
+        
+        if levelPrice >= currentLow and levelPrice <= currentHigh
+            // Distribute volume based on how much of the bar this level represents
+            levelContribution = 1.0 / (currentHigh - currentLow + 1) * currentVolume
+            
+            if isBuyPressure
+                currentBuyVolume = array.get(volumeBuy, i) + levelContribution
+                array.set(volumeBuy, i, currentBuyVolume)
+            else
+                currentSellVolume = array.get(volumeSell, i) + levelContribution
+                array.set(volumeSell, i, currentSellVolume)
+
+// Calculate statistics for extreme volume detection (only on last bar for performance)
+var float buyMean = 0.0
+var float sellMean = 0.0
+var float buyStdDev = 0.0
+var float sellStdDev = 0.0
+
+if barstate.islast
+    // Calculate statistics from current volume arrays
+    buyMean := array.avg(volumeBuy)
+    sellMean := array.avg(volumeSell)
+    buyStdDev := array.stdev(volumeBuy)
+    sellStdDev := array.stdev(volumeSell)
+
+// Identify extreme volume zones
+var line[] buyerZones = array.new<line>()
+var line[] sellerZones = array.new<line>()
+
+// Clean up old zones periodically (improved logic)
+if bar_index % 50 == 0 and array.size(buyerZones) > 0
+    // Remove buyer zones from the beginning
+    while array.size(buyerZones) > 0 and line.get_x2(array.get(buyerZones, 0)) < bar_index - lookbackPeriod
+        line.delete(array.get(buyerZones, 0))
+        array.shift(buyerZones)
+
+if bar_index % 50 == 0 and array.size(sellerZones) > 0
+    // Remove seller zones from the beginning
+    while array.size(sellerZones) > 0 and line.get_x2(array.get(sellerZones, 0)) < bar_index - lookbackPeriod
+        line.delete(array.get(sellerZones, 0))
+        array.shift(sellerZones)
+
+// Plot volume profile and extreme zones (only on last bar to avoid spam)
+if barstate.islast
+    for i = 0 to numLevels - 1
+        currentPrice = array.get(priceLevels, i)
+        buyVolume = array.get(volumeBuy, i)
+        sellVolume = array.get(volumeSell, i)
+        
+        // Check for extreme buyer volume
+        if showBuyZones and buyVolume > buyMean + (volumeThreshold * buyStdDev) and buyVolume > 0
+            // Create buyer zone
+            zoneLine = line.new(
+                 x1 = bar_index - lookbackPeriod, 
+                 y1 = currentPrice, 
+                 x2 = bar_index, 
+                 y2 = currentPrice, 
+                 color = color.new(buyerColor, 100 - zoneOpacity),
+                 style = line.style_solid,
+                 width = 3
+             )
+            array.push(buyerZones, zoneLine)
+            
+            // Label for extreme buyer zone (limit labels)
+            if array.size(buyerZones) <= 20
+                label.new(
+                     x = bar_index, 
+                     y = currentPrice, 
+                     text = "🟢 BV: " + str.tostring(buyVolume, "#.##"),
+                     color = buyerColor,
+                     textcolor = color.white,
+                     style = label.style_label_left
+                 )
+        
+        // Check for extreme seller volume
+        if showSellZones and sellVolume > sellMean + (volumeThreshold * sellStdDev) and sellVolume > 0
+            // Create seller zone
+            zoneLine = line.new(
+                 x1 = bar_index - lookbackPeriod, 
+                 y1 = currentPrice, 
+                 x2 = bar_index, 
+                 y2 = currentPrice, 
+                 color = color.new(sellerColor, 100 - zoneOpacity),
+                 style = line.style_solid,
+                 width = 3
+             )
+            array.push(sellerZones, zoneLine)
+            
+            // Label for extreme seller zone (limit labels)
+            if array.size(sellerZones) <= 20
+                label.new(
+                     x = bar_index, 
+                     y = currentPrice, 
+                     text = "🔴 SV: " + str.tostring(sellVolume, "#.##"),
+                     color = sellerColor,
+                     textcolor = color.white,
+                     style = label.style_label_right
+                 )
+
+// Optional: Plot current volume profile as background
+if barstate.islast
+    maxVolume = math.max(array.max(volumeBuy), array.max(volumeSell))
+    
+    for i = 0 to numLevels - 1
+        currentPrice = array.get(priceLevels, i)
+        buyVolume = array.get(volumeBuy, i)
+        sellVolume = array.get(volumeSell, i)
+        
+        totalVolume = buyVolume + sellVolume
+        
+        if totalVolume > 0 and maxVolume > 0
+            // Calculate profile width based on volume
+            profileWidth = (totalVolume / maxVolume) * 20
+            
+            // Plot volume profile background (light gray)
+            line.new(
+                 x1 = bar_index - profileWidth, 
+                 y1 = currentPrice, 
+                 x2 = bar_index, 
+                 y2 = currentPrice, 
+                 color = color.new(color.gray, 80),
+                 style = line.style_solid,
+                 width = 1
+             )
+
+// Display statistics
+if barstate.islast
+    table statsTable = table.new(position.top_right, 2, 5, bgcolor = color.white, border_width = 1)
+    
+    table.cell(statsTable, 0, 0, "Volume Profile Stats", bgcolor = color.gray, text_color = color.white)
+    table.cell(statsTable, 1, 0, "Values", bgcolor = color.gray, text_color = color.white)
+    
+    table.cell(statsTable, 0, 1, "Buy Volume Mean")
+    table.cell(statsTable, 1, 1, str.tostring(buyMean, "#.##"))
+    
+    table.cell(statsTable, 0, 2, "Sell Volume Mean")
+    table.cell(statsTable, 1, 2, str.tostring(sellMean, "#.##"))
+    
+    table.cell(statsTable, 0, 3, "Buy Zones Found")
+    table.cell(statsTable, 1, 3, str.tostring(array.size(buyerZones)))
+    
+    table.cell(statsTable, 0, 4, "Sell Zones Found")
+    table.cell(statsTable, 1, 4, str.tostring(array.size(sellerZones)))
